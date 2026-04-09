@@ -64,6 +64,22 @@ fun MainScreen(modifier: Modifier = Modifier) {
     var inputText by remember { mutableStateOf("") }
     var itemList by remember { mutableStateOf(listOf<String>()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var isSorted by remember { mutableStateOf(false) }
+
+    // Derived list: filter by search, then optionally sort
+    val displayedList = remember(itemList, searchQuery, isSorted) {
+        try {
+            val filtered = if (searchQuery.isBlank()) itemList
+                           else itemList.filter { it.contains(searchQuery, ignoreCase = true) }
+            val result = if (isSorted) filtered.sorted() else filtered
+            Log.d("MainScreen", "displayedList updated: total=${itemList.size}, shown=${result.size}, sorted=$isSorted, query=\"$searchQuery\"")
+            result
+        } catch (e: Exception) {
+            Log.e("MainScreen", "Error computing displayedList", e)
+            itemList
+        }
+    }
 
     Column(
         modifier = modifier
@@ -121,6 +137,10 @@ fun MainScreen(modifier: Modifier = Modifier) {
                             errorMessage = "Maximum $MAX_INPUT_LENGTH characters allowed"
                             Log.w("MainScreen", "Add attempted but input exceeds max length: ${inputText.length}/$MAX_INPUT_LENGTH")
                         }
+                        itemList.any { it.equals(inputText.trim(), ignoreCase = true) } -> {
+                            errorMessage = "\"${inputText.trim()}\" already exists in the list"
+                            Log.w("MainScreen", "Duplicate item attempted: \"${inputText.trim()}\"")
+                        }
                         else -> {
                             itemList = itemList + inputText.trim()
                             Log.d("MainScreen", "Item added: $inputText | Total items: ${itemList.size}")
@@ -142,6 +162,7 @@ fun MainScreen(modifier: Modifier = Modifier) {
                 try {
                     val clearedCount = itemList.size
                     itemList = emptyList()
+                    searchQuery = ""
                     Log.d("MainScreen", "List cleared | $clearedCount items removed")
                 } catch (e: Exception) {
                     Log.e("MainScreen", "Error clearing list", e)
@@ -153,11 +174,55 @@ fun MainScreen(modifier: Modifier = Modifier) {
             Text("Clear All")
         }
 
+        // ── Item count + Sort toggle ──────────────────────────────────────
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (searchQuery.isBlank()) "Items: ${itemList.size}"
+                       else "Items: ${itemList.size}  (${displayedList.size} shown)",
+                style = MaterialTheme.typography.bodySmall
+            )
+            TextButton(
+                onClick = {
+                    try {
+                        isSorted = !isSorted
+                        Log.d("MainScreen", "Sort toggled: isSorted=$isSorted")
+                    } catch (e: Exception) {
+                        Log.e("MainScreen", "Error toggling sort", e)
+                    }
+                },
+                enabled = itemList.isNotEmpty()
+            ) {
+                Text(if (isSorted) "Sorted ✓" else "Sort A–Z")
+            }
+        }
+
+        // ── Search / Filter ───────────────────────────────────────────────
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = {
+                try {
+                    searchQuery = it
+                    Log.d("MainScreen", "Search query changed: \"$it\"")
+                } catch (e: Exception) {
+                    Log.e("MainScreen", "Error updating search query", e)
+                }
+            },
+            label = { Text("Search list") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = itemList.isNotEmpty()
+        )
+
+        // ── List ──────────────────────────────────────────────────────────
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(itemList) { item ->
+            items(displayedList) { item ->
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier
